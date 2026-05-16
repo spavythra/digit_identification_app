@@ -1,50 +1,109 @@
-# Digit Recognition App
-### Developed with
-* React JS Front-end
-* Python Flask back-end
-* microservices architecture
-* containerized with Docker
+# Handwritten Digit Recognition App
 
-### Features
-Program flow is explained as a logical flow (Algorithm or pseudo code) of the Digit recognition is given in below steps.
-1.	Browse the handwritten image as input to browse section.
-2.	Clicking on upload button, uploads the image.
-3.	Once the model predicted the digit, it will show the output as a string below the upload button.
-4.	Clicking on translate button to translates the string.
-5.	The translated text will be displayed under the translate button.
-6.	Clicking on play button converts the translated text as speech.
-7.	The audio will be displayed under the play button.
-8.	Clicking on the audio, it will pronounce the translated digit.
+A full-stack application that recognises handwritten digits from an uploaded image using a trained CNN model, translates the result to Finnish, and converts it to speech using Azure Cognitive Services.
 
+---
 
-## Installation
-docker-compose up --build
+## How It Works
 
-## Deployment
---
+1. User uploads a handwritten digit image
+2. React frontend sends the image to the Python Flask backend
+3. A trained Keras CNN model predicts the digit
+4. The result is translated from English to Finnish via Azure Translator
+5. Azure Cognitive Speech converts the Finnish text to audio
+6. Audio is returned and played in the browser
 
-## Acknowledgements
---
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, Axios, FontAwesome |
+| Backend | Python, Flask, Keras, TensorFlow |
+| ML Model | CNN trained on MNIST (handwritten digits) |
+| Translation | Azure Translator Cognitive Service |
+| Text to Speech | Azure Cognitive Speech Service |
+| Infrastructure | Docker, Docker Compose, Nginx (reverse proxy) |
+
+---
+
+## Architecture
+
+Microservices architecture with three containers orchestrated via Docker Compose:
+
+```
+Browser
+  |
+Nginx (port 3050)
+  |-- /          --> React frontend (port 3000)
+  |-- /api       --> Flask backend  (port 5000)
+```
+
+---
+
+## Project Structure
+
+```
+digit_identification/
+├── frontend/           # React 18 app
+│   ├── src/
+│   └── Dockerfile.dev
+├── backend/            # Python Flask API + Keras model
+│   ├── main.py         # Flask routes
+│   ├── model.py        # CNN model definition
+│   ├── keras_model.py  # Model training script
+│   ├── handwritten_digits.h5
+│   └── Dockerfile.dev
+├── nginx/              # Reverse proxy config
+│   └── Dockerfile.dev
+└── docker-compose.yml
+```
+
+---
 
 ## Snapshots
 
-* React app home page when we execute the code
+React app home page
 
-![image](https://github.com/spavythra/kube_digit_identification/assets/87486009/c6438cef-4c7b-489a-9136-b049ddc4b1d1)
+![Home](https://github.com/spavythra/kube_digit_identification/assets/87486009/c6438cef-4c7b-489a-9136-b049ddc4b1d1)
 
+Digit prediction result after upload
 
-* When the User uploads the image, app shows the uploading percentage if the action is successful and shows the error message if it fails. After that it will show the predicted digit as string
+![Prediction](https://github.com/spavythra/kube_digit_identification/assets/87486009/42a898b2-1ce8-4a94-99ef-74df16cb2c9b)
 
-![image](https://github.com/spavythra/kube_digit_identification/assets/87486009/42a898b2-1ce8-4a94-99ef-74df16cb2c9b)
+Finnish translation of the predicted digit
 
+![Translation](https://github.com/spavythra/kube_digit_identification/assets/87486009/7e6a69e4-56db-4537-9702-2018788d7bb8)
 
-*  After clicking on the translate button, the string will be translated from English to Finnish
+Azure Speech text to speech output
 
-![image](https://github.com/spavythra/kube_digit_identification/assets/87486009/7e6a69e4-56db-4537-9702-2018788d7bb8)
+![Speech](https://github.com/spavythra/kube_digit_identification/assets/87486009/f06f4ff2-10e1-4b3e-8302-c6172b998fc0)
 
+---
 
-*  After clicking on the speech button, the translated number will be converted to speech using Azure speech cognitive service
+## Run Locally
 
-![image](https://github.com/spavythra/kube_digit_identification/assets/87486009/f06f4ff2-10e1-4b3e-8302-c6172b998fc0)
+### Prerequisites
 
-=======
+- Docker and Docker Compose
+- Azure Translator and Speech API keys
+
+### Setup
+
+1. Clone the repository
+
+```bash
+git clone https://github.com/spavythra/kube_digit_identification.git
+cd kube_digit_identification
+```
+
+2. Add your Azure credentials to the backend environment
+
+3. Start all services
+
+```bash
+docker-compose up --build
+```
+
+App runs at `http://localhost:3050`
