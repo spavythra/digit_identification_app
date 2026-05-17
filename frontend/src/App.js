@@ -1,148 +1,213 @@
-import React, { Fragment, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import axios from 'axios';
-import soundfile from './outputaudio.wav'
-import Message from './components/Message';
-import Progress from './components/Progress';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUserSecret } from '@fortawesome/free-solid-svg-icons';
+import DrawCanvas from './components/DrawCanvas';
+import './App.css';
 
-function App() {
+const STEPS = ['Draw', 'Predict', 'Translate', 'Listen'];
+
+function stepIndex(prediction, translation, audioUrl) {
+  if (audioUrl) return 3;
+  if (translation) return 3;
+  if (prediction !== null) return 2;
+  return 1;
+}
+
+export default function App() {
+  const canvasRef = useRef(null);
+  const audioRef = useRef(null);
+
   const [prediction, setPrediction] = useState(null);
-  const [selectedImage, setSelectedImage] = useState('');
-  const [uploadPercentage, setUploadPercentage] = useState(0);
-  const [filename, setFilename] = useState('Choose File');
-  const [message, setMessage] = useState('');
-  const [text, setText] = useState('');
   const [translation, setTranslation] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
+  const [loading, setLoading] = useState('');
+  const [error, setError] = useState('');
 
-  const convertTextToSpeech = async () => {
+  const currentStep = stepIndex(prediction, translation, audioUrl);
+
+  function reset() {
+    setPrediction(null);
+    setTranslation('');
+    setAudioUrl('');
+    setError('');
+    canvasRef.current?.clear();
+  }
+
+  async function handlePredict() {
+    if (!canvasRef.current?.hasStrokes) {
+      setError('Draw a digit first.');
+      return;
+    }
+    setError('');
+    setLoading('predict');
+    canvasRef.current.getBlob(async (blob) => {
       try {
-        await axios.post('/text-to-speech', translation, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-        .then((response) => {
-        setAudioUrl(response.data);
-      })
-      } catch (error) {
-        console.error(error.response.data);
+        const form = new FormData();
+        form.append('image', blob, 'digit.png');
+        const { data } = await axios.post('/recognize_digit', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setPrediction(data.prediction);
+      } catch {
+        setError('Prediction failed — backend may not be running. See GitHub for Docker setup.');
+      } finally {
+        setLoading('');
       }
-    };
-
-  const handleChange = (event) => {
-    setText(event.target.value);
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    try {
-      const response = await axios.post('/translate', { text });
-      setTranslation(response.data);
-    } catch (error) {
-      console.error('Error translating text:', error);
-    }
-  };
-
-  function handleImage(e) {
-    setSelectedImage(e.target.files[0])
-    setFilename(e.target.files[0].name);
+    });
   }
 
-  const handleUpload = async (event) => {
-    event.preventDefault();
-
-    // Create FormData object
-    const formData = new FormData();
-    formData.append('image', selectedImage);
-
-    // Send FormData to Flask back-end
+  async function handleTranslate() {
+    if (prediction === null) return;
+    setError('');
+    setLoading('translate');
     try {
-      await axios.post('/recognize_digit', formData,{
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        onUploadProgress: progressEvent => {
-          setUploadPercentage(
-            parseInt(
-              Math.round((progressEvent.loaded * 100) / progressEvent.total)
-            )
-          )
-        }
-      })
-      .then(setTimeout(() => setUploadPercentage(0), 10000))
-      .then(response => {
-        setPrediction(response.data.prediction)
-      })
-
-      setMessage('File Uploaded')
-      setTimeout(() => setMessage(''), 10000)
-      console.log('Image uploaded successfully.');
-    }
-    catch(error) {
-      console.error('Error uploading image:',error)
-      setMessage('There was a problem with the server');
-      setUploadPercentage(0)
+      const { data } = await axios.post('/translate', { text: String(prediction) });
+      setTranslation(data);
+    } catch {
+      setError('Translation failed — Azure Translator key required.');
+    } finally {
+      setLoading('');
     }
   }
 
+  async function handleSpeak() {
+    if (!translation) return;
+    setError('');
+    setLoading('speak');
+    try {
+      const { data } = await axios.post(
+        '/text-to-speech',
+        translation,
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+      setAudioUrl(data);
+      setTimeout(() => audioRef.current?.play(), 100);
+    } catch {
+      setError('Text-to-speech failed — Azure Speech key required.');
+    } finally {
+      setLoading('');
+    }
+  }
 
   return (
-    <div className='container mt-4'>
-      <h4 className='display-4 text-center mb-4'><FontAwesomeIcon icon={faUserSecret} /> Digit Recognition App</h4>
-      <div className='alert alert-info text-center mb-4' role='alert'>
-        <strong>Portfolio demo</strong> — predictions require the Docker backend with Azure Cognitive Services.
-        See <a href='https://github.com/spavythra/kube_digit_identification' target='_blank' rel='noreferrer' className='alert-link'>GitHub</a> for full setup.
-      </div>
+    <div className="app">
+      <header className="app-header">
+        <div className="header-badge">CNN</div>
+        <div>
+          <h1 className="app-title">Neural Digit</h1>
+          <p className="app-subtitle">Draw · Predict · Translate · Hear</p>
+        </div>
+      </header>
 
-    <div className='p-2 border border-info'>
-    <Fragment>
-      {message ? <Message msg={message} /> : null}
-      <form onSubmit={handleUpload}>
-      <div className='fs-4 text-center custom-file mb-4'>
-          Upload your image below
-        </div>
-        <div className='custom-file text-center mb-4'>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImage}
-            className='custom-file-input'
-          />
+      <main className="app-main">
+        <div className="stepper" aria-label="Progress steps">
+          {STEPS.map((label, i) => (
+            <div
+              key={label}
+              className={`stepper-step ${i < currentStep ? 'done' : ''} ${i === currentStep ? 'active' : ''}`}
+            >
+              <span className="stepper-dot" aria-hidden="true">{i < currentStep ? '✓' : i + 1}</span>
+              <span className="stepper-label">{label}</span>
+            </div>
+          ))}
         </div>
 
-        <Progress percentage={uploadPercentage} />
-        <div className="text-center">
-        <input
-          type='submit'
-          value='Upload'
-          className='btn btn-primary btn-block mt-4'
-        />
-        </div>
-      </form>
-      <div>{prediction && <p className="fs-4 p-1 custom-file-label bg-info text-center mt-4 text-white">The predicted number is <p class="fw-bold text-uppercase">{prediction}</p></p>}</div>
-    </Fragment>
+        {error && (
+          <div className="error-banner" role="alert">
+            <span className="error-icon">⚠</span> {error}
+          </div>
+        )}
 
-    <div className="text-center">
-    {prediction &&<form onSubmit={handleSubmit}>
-        <button className='btn btn-primary btn-block mt-4' value={prediction} onClick={handleChange}>Translate</button>
-      </form>}
-      {translation && <div className="fs-4 p-1 custom-file-label bg-info text-center mt-4 text-white">Finnish translation for the given number is <p class="fw-bold text-uppercase">{translation}</p></div>}
-    </div>
-    <div>
-    {translation && <form>
-      <div className="text-center">
-        <button type="button" className='btn btn-primary btn-block mt-4' value={translation} onClick={convertTextToSpeech}>Play</button>
+        <div className="card-grid">
+          <section className="card canvas-card" aria-labelledby="draw-heading">
+            <h2 id="draw-heading" className="card-title">
+              <span className="card-num">01</span> Draw a digit
+            </h2>
+            <p className="card-hint">Use your mouse or finger to draw 0–9 on the canvas below.</p>
+            <div className="canvas-wrapper">
+              <DrawCanvas ref={canvasRef} size={280} />
+            </div>
+            <div className="canvas-actions">
+              <button className="btn btn-ghost" onClick={reset} type="button">Clear</button>
+              <button
+                className="btn btn-primary"
+                onClick={handlePredict}
+                disabled={loading === 'predict'}
+                type="button"
+              >
+                {loading === 'predict' ? <span className="spinner" aria-hidden="true" /> : null}
+                {loading === 'predict' ? 'Predicting…' : 'Predict →'}
+              </button>
+            </div>
+          </section>
+
+          <div className="results-col">
+            <section className={`card result-card ${prediction === null ? 'card-inactive' : ''}`} aria-labelledby="predict-heading">
+              <h2 id="predict-heading" className="card-title">
+                <span className="card-num">02</span> Prediction
+              </h2>
+              {prediction !== null ? (
+                <>
+                  <div className="big-result" aria-live="polite">{prediction}</div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleTranslate}
+                    disabled={loading === 'translate'}
+                    type="button"
+                  >
+                    {loading === 'translate' ? <span className="spinner" aria-hidden="true" /> : null}
+                    {loading === 'translate' ? 'Translating…' : 'Translate to Finnish →'}
+                  </button>
+                </>
+              ) : (
+                <p className="card-empty">Waiting for prediction…</p>
+              )}
+            </section>
+
+            <section className={`card result-card ${!translation ? 'card-inactive' : ''}`} aria-labelledby="translate-heading">
+              <h2 id="translate-heading" className="card-title">
+                <span className="card-num">03</span> Finnish
+              </h2>
+              {translation ? (
+                <>
+                  <div className="big-result fi-word" aria-live="polite">{translation}</div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSpeak}
+                    disabled={loading === 'speak'}
+                    type="button"
+                  >
+                    {loading === 'speak' ? <span className="spinner" aria-hidden="true" /> : null}
+                    {loading === 'speak' ? 'Generating audio…' : '▶ Hear it in Finnish'}
+                  </button>
+                  {audioUrl && (
+                    <audio
+                      ref={audioRef}
+                      src={audioUrl}
+                      controls
+                      className="audio-player"
+                      aria-label="Finnish pronunciation audio"
+                    />
+                  )}
+                </>
+              ) : (
+                <p className="card-empty">Waiting for translation…</p>
+              )}
+            </section>
+          </div>
         </div>
-        </form>}
-      {audioUrl && <audio className="w-100 mt-4" id="plyr-audio-player" src={soundfile} controls />}
-    </div>
-    </div>
+
+        <footer className="app-footer">
+          <span>Keras CNN · Azure Translator · Azure Speech · Flask · React</span>
+          <a
+            href="https://github.com/spavythra/digit_identification_app"
+            target="_blank"
+            rel="noreferrer"
+            className="footer-link"
+          >
+            Full Docker setup on GitHub →
+          </a>
+        </footer>
+      </main>
     </div>
   );
 }
-
-export default App;
-
