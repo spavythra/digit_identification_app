@@ -92,6 +92,10 @@ function App() {
   return (
     <div className='container mt-4'>
       <h4 className='display-4 text-center mb-4'><FontAwesomeIcon icon={faUserSecret} /> Digit Recognition App</h4>
+      <div className='alert alert-info text-center mb-4' role='alert'>
+        <strong>Portfolio demo</strong> — predictions require the Docker backend with Azure Cognitive Services.
+        See <a href='https://github.com/spavythra/kube_digit_identification' target='_blank' rel='noreferrer' className='alert-link'>GitHub</a> for full setup.
+      </div>
 
     <div className='p-2 border border-info'>
     <Fragment>
